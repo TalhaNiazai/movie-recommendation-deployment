@@ -21,11 +21,5 @@
       "src": "/(.*)",
       "dest": "app.py"
     }
-  ],
-  "env": {
-    "REDIS_HOST": "@redis-host",
-    "REDIS_PORT": "@redis-port",
-    "REDIS_PASSWORD": "@redis-password",
-    "PORT": "5000"
-  }
+  ]
 }
