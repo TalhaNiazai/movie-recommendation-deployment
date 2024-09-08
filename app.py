@@ -4,46 +4,64 @@ from database import load_movies
 from scipy.sparse import load_npz
 import logging
 import pickle
-
+import os
+import requests  # Add requests to download the matrix file
+from dotenv import load_dotenv
 
 app = Flask(__name__)
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+load_dotenv()
 
-# Redis connection setup
+# Redis connection setup using environment variables
 redis_client = redis.StrictRedis(
-    host='redis-14520.c305.ap-south-1-1.ec2.redns.redis-cloud.com',
-    port=14520,
-    password='oDEwiX0SSQIKnc4PNJngPJJ9ziRe0gvP',
+    host=os.getenv('REDIS_HOST'),
+    port=int(os.getenv('REDIS_PORT')),
+    password=os.getenv('REDIS_PASSWORD'),
     decode_responses=False  # Ensure binary responses
 )
 
-with open('similarity_matrix.npz', 'rb') as f:
+# GitHub release URL for the similarity matrix
+MATRIX_URL = 'https://github.com/TalhaNiazai/movie-recommendation-deployment/releases/download/v1.0/similarity_matrix.npz'
+
+# Path to save the downloaded file
+MATRIX_FILE_PATH = 'similarity_matrix.npz'
+
+# Function to download the file if it doesn't exist locally
+
+
+def download_similarity_matrix():
+    if not os.path.exists(MATRIX_FILE_PATH):
+        logging.info("Downloading similarity matrix from GitHub...")
+        response = requests.get(MATRIX_URL)
+        with open(MATRIX_FILE_PATH, 'wb') as f:
+            f.write(response.content)
+        logging.info("Download complete.")
+
+# Download the matrix if necessary
+download_similarity_matrix()
+
+# Load similarity matrix
+with open(MATRIX_FILE_PATH, 'rb') as f:
     similarity = load_npz(f)
 
 # Load the movie list from PostgreSQL
 movies = load_movies()
-
 
 @app.route('/recommend', methods=['GET'])
 def recommend():
     try:
         movie_title = request.args.get('movie')
 
-        # Validate movie title
         if not movie_title:
             return jsonify({"error": "Movie title is required"}), 400
 
-        # Check cache first
+        # Check if recommendations are cached in Redis
         cached_recommendations = redis_client.get(movie_title)
         if cached_recommendations:
             try:
-                if isinstance(cached_recommendations, bytes):
-                    recommendations = pickle.loads(cached_recommendations)
-                else:
-                    raise TypeError("Cached data is not in bytes format")
-
+                recommendations = pickle.loads(cached_recommendations)
                 return jsonify(recommendations=recommendations)
             except pickle.PickleError as e:
                 logging.error(f"Error decoding cached recommendations: {e}")
@@ -52,23 +70,19 @@ def recommend():
         # Check if the movie is in the dataset
         if movie_title in movies['title'].values:
             index = movies[movies['title'] == movie_title].index[0]
-
-            # Extract the row of similarities for the given movie
             distances = similarity[index].toarray().flatten()
-
-            # Get indices and sort by similarity score
             distance_with_index = list(enumerate(distances))
             distance_with_index.sort(key=lambda x: x[1], reverse=True)
 
+            # Get top 5 similar movies
             recommendations = []
-            # Get top 5 similar movies (excluding the queried movie)
             for i in distance_with_index[1:6]:
                 recommend_movie = movies.iloc[i[0]].title
                 recommendations.append(recommend_movie)
 
-            # Cache the recommendations
+            # Cache the recommendations in Redis
             try:
-                redis_client.set(movie_title, pickle.dumps(recommendations), ex=86400)
+                redis_client.set(movie_title, pickle.dumps(recommendations), ex=86400)  # Cache for 24 hours
             except pickle.PickleError:
                 return jsonify({"error": "Error encoding recommendations for cache"}), 500
 
@@ -81,6 +95,5 @@ def recommend():
         logging.error(f"An error occurred: {e}")
         return jsonify({"error": "An internal server error occurred"}), 500
 
-
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=False)

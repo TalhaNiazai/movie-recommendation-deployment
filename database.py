@@ -1,17 +1,18 @@
 import psycopg2
 import pandas as pd
 import logging
+import os
+from dotenv import load_dotenv
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
-
-# Database connection details
-url = 'https://qdsijfxkqpidkurjjkwb.supabase.co'
-USER = 'postgres.qdsijfxkqpidkurjjkwb'
-PASSWORD = 'Onvkw6d32uEr3Nr6'
-HOST = 'aws-0-ap-south-1.pooler.supabase.com'
-PORT = '6543'
-
+logging.basicConfig(filename='database.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+load_dotenv()
+# Database connection details from environment variables
+DATABASE_URL = os.getenv('DATABASE_URL')
+USER = os.getenv('DATABASE_USER')
+PASSWORD = os.getenv('DATABASE_PASSWORD')
+HOST = os.getenv('DATABASE_HOST')
+PORT = os.getenv('DATABASE_PORT')
 
 def get_db_connection():
     try:
@@ -26,7 +27,6 @@ def get_db_connection():
     except Exception as e:
         logging.error(f"Error connecting to database: {e}")
         return None
-
 
 def insert_movies(movie_list):
     conn = get_db_connection()
@@ -47,7 +47,6 @@ def insert_movies(movie_list):
         conn.rollback()
     finally:
         conn.close()
-
 
 def load_movies():
     conn = get_db_connection()
