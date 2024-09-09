@@ -3,17 +3,7 @@
   "builds": [
     {
       "src": "app.py",
-      "use": "@vercel/python",
-      "config": {
-        "runtime": "python",
-        "includeFiles": [
-          "requirements.txt",
-          "runtime.txt",
-          "app.py",
-          "database.py",
-          ".env"
-        ]
-      }
+      "use": "@vercel/python"
     }
   ],
   "routes": [
@@ -21,5 +11,13 @@
       "src": "/(.*)",
       "dest": "app.py"
     }
-  ]
+  ],
+  "env": {
+    "NODE_OPTIONS": "--max-old-space-size=16384"
+  },
+  "functions": {
+    "app.py": {
+      "maxDuration": 10
+    }
+  }
 }
